@@ -22,7 +22,9 @@ jobs:
         run: pip install mlflow==2.19.0
 
       - name: Run MLflow Project
-        run: mlflow run .
+        run: |
+          pip install scikit-learn mlflow==2.19.0
+          mlflow run . --env-manager=local
 
       - name: Build Docker Image from MLflow Model
         run: |
