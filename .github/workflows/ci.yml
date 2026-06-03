@@ -10,42 +10,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Run actions/checkout@v3
+        uses: actions/checkout@v3
 
-      - name: Setup Python 3.12.7
+      - name: Set up Python 3.12.7
         uses: actions/setup-python@v5
         with:
           python-version: '3.12.7'
 
-      - name: Install MLflow
-        run: pip install mlflow==2.19.0
-
-      - name: Run MLflow Project
+      - name: Check Env
         run: |
-          pip install scikit-learn mlflow==2.19.0
-          mlflow run . --env-manager=local
+          python --version
+          pip --version
 
-      - name: Build Docker Image from MLflow Model
+      - name: Install dependencies
+        run: pip install mlflow==2.19.0 scikit-learn
+
+      - name: Run mlflow project
+        run: mlflow run . --env-manager=local
+
+      - name: Get latest MLflow run_id
         run: |
-          # Ekstrak Run ID dari direktori mlruns
-          # Di GitHub Actions, ini akan mengambil folder run id pertama yang dihasilkan
           RUN_ID=$(ls mlruns/0 | grep -E '^[0-9a-f]+$' | head -n 1)
-          echo "Found RUN_ID: $RUN_ID"
-          
-          # Build docker image dengan model tersebut
-          # Note: ${{ secrets.DOCKER_USERNAME }} akan diambil dari GitHub Secrets repo Anda
-          mlflow models build-docker -m runs:/$RUN_ID/model -n ${{ secrets.DOCKER_USERNAME }}/hr-attrition-model:latest --env-manager=local
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+          echo "Berhasil mendapatkan RUN_ID: $RUN_ID"
 
-      - name: Login to Docker Hub
+      - name: Install Python dependencies
+        run: pip install scikit-learn
+
+      - name: Upload to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-artifacts
+          path: mlruns/
+
+      - name: Build Docker Model
+        run: mlflow models build-docker -m runs:/$RUN_ID/model -n hr-attrition-model:latest --env-manager=local
+
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          # Anda wajib mengatur secrets DOCKER_USERNAME dan DOCKER_PASSWORD
-          # Di repository GitHub Anda -> Settings -> Secrets and variables -> Actions -> New repository secret
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Push Docker Image to Docker Hub
-        run: |
-          # Mengunggah image yang sudah di-build ke Docker Hub
-          docker push ${{ secrets.DOCKER_USERNAME }}/hr-attrition-model:latest
+      - name: Tag Docker Image
+        run: docker tag hr-attrition-model:latest ${{ secrets.DOCKER_USERNAME }}/hr-attrition-model:latest
+
+      - name: Push Docker Image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/hr-attrition-model:latest
